@@ -251,7 +251,16 @@ def run_full_analysis(ticker, level):
         risk_comparison = compare_with_claude(current_risk, prior_risk, "Risk Factors (Item 1A)", compare_instructions)
 
     if not (mda_analysis and risk_analysis and mda_comparison and risk_comparison):
-        return {"error": "Could not extract enough sections from the filings to complete a full analysis."}
+        missing = []
+        if not current_mda:
+            missing.append("current year MD&A")
+        if not prior_mda:
+            missing.append("prior year MD&A")
+        if not current_risk:
+            missing.append("current year Risk Factors")
+        if not prior_risk:
+            missing.append("prior year Risk Factors")
+        return {"error": f"Could not extract these sections: {', '.join(missing)}. This company's filing may use different formatting than expected."}
 
     rating = rate_with_claude(mda_analysis, risk_analysis, mda_comparison, risk_comparison, ticker, level)
 

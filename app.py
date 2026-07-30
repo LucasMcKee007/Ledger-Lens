@@ -6,6 +6,8 @@ import re
 
 headers = {"User-Agent": "YourName your_email@example.com"}
 
+st.set_page_config(page_title="Ledger Lens", page_icon="🔎", layout="centered")
+
 
 def get_cik(ticker):
     """Look up a company's CIK number from its ticker symbol."""
@@ -176,7 +178,7 @@ RISK FACTORS YEAR-OVER-YEAR COMPARISON:
 
 **Bottom Line:** One short paragraph explaining the overall picture.
 
-**Fundamental Health Score:** A number from 1-10 (10 = excellent, 1 = severe concerns), plus one sentence on why. Write the number on its own line first, in this exact format: SCORE: X/10
+**Fundamental Health Score:** Write the number on its own line first, in this exact format: SCORE: X/10 -- then one sentence on why.
 
 **Trajectory:** One word -- Improving, Stable, or Deteriorating -- plus one short sentence why.
 
@@ -195,14 +197,6 @@ RISK FACTORS YEAR-OVER-YEAR COMPARISON:
 
     return response.content[0].text
 
-
-# ============================================================
-# CACHED WRAPPER FUNCTIONS
-# ============================================================
-# @st.cache_data remembers the result for a given set of inputs.
-# If someone looks up the same ticker + experience level again,
-# Streamlit returns the saved result instantly instead of
-# re-downloading filings and re-calling Claude from scratch.
 
 @st.cache_data(show_spinner=False)
 def run_full_analysis(ticker, level):
@@ -277,28 +271,139 @@ def run_full_analysis(ticker, level):
 
 
 def extract_score(rating_text):
-    """Pull the X/10 score out of the rating text, if present, for display as a metric."""
+    """Pull the X/10 score out of the rating text, if present."""
     match = re.search(r"SCORE:\s*(\d+)\s*/\s*10", rating_text, re.IGNORECASE)
     if match:
         return match.group(1)
     return None
 
 
+def extract_trajectory(rating_text):
+    """Pull the trajectory word out of the rating text, if present."""
+    match = re.search(r"Trajectory:?\*{0,2}\s*(Improving|Stable|Deteriorating)", rating_text, re.IGNORECASE)
+    if match:
+        return match.group(1).capitalize()
+    return None
+
+
 # ============================================================
-# STREAMLIT PAGE STARTS HERE -- everything below is the UI
+# CUSTOM DESIGN SYSTEM -- fonts, colors, and the signature stamp
 # ============================================================
 
-st.title("🔎 Ledger Lens")
-st.write("Understand any public company's financial health in one click — no finance background, no digging through 100-page filings required.")
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+h1, h2, h3 {
+    font-family: 'Fraunces', serif !important;
+    color: #14213D !important;
+    font-weight: 600 !important;
+}
+
+.ledger-subtitle {
+    font-family: 'Inter', sans-serif;
+    color: #6B6B63;
+    font-size: 1.05rem;
+    margin-top: -0.6rem;
+}
+
+.ledger-rule {
+    border: none;
+    border-top: 1px solid #D8D4C7;
+    margin: 1.6rem 0;
+}
+
+.ticker-mono {
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.03em;
+}
+
+/* The signature element: a stamp-style badge for the health score */
+.stamp-wrapper {
+    display: flex;
+    justify-content: center;
+    margin: 1.5rem 0 2rem 0;
+}
+
+.stamp {
+    width: 148px;
+    height: 148px;
+    border-radius: 50%;
+    border: 3px double #B08D57;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #F6F5F1;
+    box-shadow: 0 1px 3px rgba(20, 33, 61, 0.08);
+}
+
+.stamp-score {
+    font-family: 'Fraunces', serif;
+    font-size: 2.6rem;
+    font-weight: 700;
+    color: #14213D;
+    line-height: 1;
+}
+
+.stamp-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #B08D57;
+    margin-top: 4px;
+}
+
+.trajectory-badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 3px;
+    margin-bottom: 1rem;
+}
+
+.trajectory-improving { background: #E7EEE7; color: #3A5A40; }
+.trajectory-stable { background: #EDEBE3; color: #6B6B63; }
+.trajectory-deteriorating { background: #F2E1DF; color: #8C1C13; }
+
+/* Buttons */
+.stButton > button {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    border-radius: 3px;
+    border: 1px solid #14213D;
+}
+
+/* Expander headers */
+.streamlit-expanderHeader {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ============================================================
+# STREAMLIT PAGE STARTS HERE
+# ============================================================
+
+st.markdown("# 🔎 Ledger Lens")
+st.markdown('<p class="ledger-subtitle">Understand any public company\'s financial health in one click — no finance background, no digging through 100-page filings required.</p>', unsafe_allow_html=True)
 st.caption("Ledger Lens automatically finds, reads, and compares a company's official SEC filings year-over-year, then explains what it means in plain English.")
 
-st.write("")  # small spacer
+st.markdown('<hr class="ledger-rule">', unsafe_allow_html=True)
 
-# Example ticker buttons
 st.write("**Try an example:**")
 example_col1, example_col2, example_col3, example_col4 = st.columns(4)
 
-# session_state lets us "remember" a value across reruns -- here, which ticker was clicked
 if "ticker_value" not in st.session_state:
     st.session_state.ticker_value = ""
 
@@ -357,19 +462,32 @@ if analyze_clicked:
             if result["error"]:
                 st.error(result["error"])
             else:
+                st.markdown('<hr class="ledger-rule">', unsafe_allow_html=True)
                 st.info(f"✅ Found and compared {ticker}'s two most recent annual filings (10-Ks): {result['current_date']} vs. {result['prior_date']}")
 
-                # --- Verdict, with a visual score metric ---
-                st.header(f"Quick Verdict: {ticker}")
+                st.markdown(f'<h2><span class="ticker-mono">{ticker}</span> — Quick Verdict</h2>', unsafe_allow_html=True)
 
                 score = extract_score(result["rating"])
+                trajectory = extract_trajectory(result["rating"])
+
                 if score:
-                    st.metric(label="Fundamental Health Score", value=f"{score}/10")
+                    st.markdown(f"""
+                    <div class="stamp-wrapper">
+                        <div class="stamp">
+                            <div class="stamp-score">{score}/10</div>
+                            <div class="stamp-label">Fundamental Health</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                if trajectory:
+                    css_class = f"trajectory-{trajectory.lower()}"
+                    st.markdown(f'<div style="text-align:center;"><span class="trajectory-badge {css_class}">{trajectory}</span></div>', unsafe_allow_html=True)
 
                 st.markdown(result["rating"])
 
-                # --- MD&A ---
-                st.header("MD&A: What Management Said")
+                st.markdown('<hr class="ledger-rule">', unsafe_allow_html=True)
+                st.markdown("## MD&A: What Management Said")
 
                 with st.expander("This Year's MD&A Analysis"):
                     st.markdown(result["mda_analysis"])
@@ -377,8 +495,8 @@ if analyze_clicked:
                 with st.expander("What Changed From Last Year"):
                     st.markdown(result["mda_comparison"])
 
-                # --- Risk Factors ---
-                st.header("Risk Factors: What Could Go Wrong")
+                st.markdown('<hr class="ledger-rule">', unsafe_allow_html=True)
+                st.markdown("## Risk Factors: What Could Go Wrong")
 
                 with st.expander("This Year's Risk Factors Analysis"):
                     st.markdown(result["risk_analysis"])
@@ -386,4 +504,5 @@ if analyze_clicked:
                 with st.expander("What Changed From Last Year"):
                     st.markdown(result["risk_comparison"])
 
+                st.markdown('<hr class="ledger-rule">', unsafe_allow_html=True)
                 st.caption("This analysis is based only on the company's own public SEC filing. It is not a stock price prediction and should not be the sole basis for an investment decision.")

@@ -61,18 +61,50 @@ def download_filing(cik, accession, primary_doc):
     return response.text
 
 
-def extract_section(html, start_marker, end_marker):
-    """Pull out a section of text between two markers (e.g. 'item 7.' and 'item 8.')."""
+def extract_section(html, section_key):
+    """Extract a 10-K section by name, robust to formatting variations across companies."""
     soup = BeautifulSoup(html, "html.parser")
     full_text = soup.get_text()
+
+    # Normalize non-breaking spaces and other whitespace variants
+    # (some companies embed Item numbers with special space characters instead of regular spaces)
+    full_text = full_text.replace("\xa0", " ").replace("\u2009", " ").replace("\u202f", " ")
     search_text = full_text.lower()
 
-    start_index = search_text.rfind(start_marker)
+    # For each section, try multiple start-marker patterns and multiple end-marker options
+    if section_key == "mda":
+        start_candidates = ["item 7.", "item 7 ", "management's discussion and analysis"]
+        end_candidates = ["item 7a.", "item 7a ", "item 8.", "item 8 ", "quantitative and qualitative disclosures", "financial statements and supplementary data"]
+    elif section_key == "risk_factors":
+        start_candidates = ["item 1a.", "item 1a ", "risk factors"]
+        end_candidates = ["item 1b.", "item 1b ", "item 1c.", "item 1c ", "item 2.", "item 2 ", "unresolved staff comments", "properties"]
+    else:
+        return None
+
+    # Find the last occurrence of any start-marker candidate (skips table of contents entries)
+    start_index = -1
+    for candidate in start_candidates:
+        found = search_text.rfind(candidate)
+        if found > start_index:
+            start_index = found
+
     if start_index == -1:
         return None
 
-    end_index = search_text.find(end_marker, start_index + len(start_marker))
-    return full_text[start_index:end_index]
+    # Find the earliest end-marker candidate that appears AFTER start_index
+    end_index = len(full_text)
+    for candidate in end_candidates:
+        found = search_text.find(candidate, start_index + 50)  # skip 50 chars past the header itself
+        if found != -1 and found < end_index:
+            end_index = found
+
+    section = full_text[start_index:end_index].strip()
+
+    # Sanity check -- a real section should be at least a few thousand characters
+    if len(section) < 2000:
+        return None
+
+    return section
 
 
 def get_instructions_for_level(level, task):
@@ -216,8 +248,9 @@ def run_full_analysis(ticker, level):
     current_html = download_filing(cik, current_accession, current_doc)
     prior_html = download_filing(cik, prior_accession, prior_doc)
 
-    current_mda = extract_section(current_html, "item 7.", "item 8.")
-    prior_mda = extract_section(prior_html, "item 7.", "item 8.")
+    # --- Extraction now uses simple section keys with the more robust helper ---
+    current_mda = extract_section(current_html, "mda")
+    prior_mda = extract_section(prior_html, "mda")
 
     mda_analysis = None
     mda_comparison = None
@@ -230,8 +263,8 @@ def run_full_analysis(ticker, level):
         compare_instructions = get_instructions_for_level(level, "compare")
         mda_comparison = compare_with_claude(current_mda, prior_mda, "Management's Discussion and Analysis (MD&A)", compare_instructions)
 
-    current_risk = extract_section(current_html, "item 1a.", "item 1b.")
-    prior_risk = extract_section(prior_html, "item 1a.", "item 1b.")
+    current_risk = extract_section(current_html, "risk_factors")
+    prior_risk = extract_section(prior_html, "risk_factors")
 
     risk_analysis = None
     risk_comparison = None
@@ -322,7 +355,6 @@ h1, h2, h3 {
     letter-spacing: 0.03em;
 }
 
-/* The signature element: a stamp-style badge for the health score */
 .stamp-wrapper {
     display: flex;
     justify-content: center;
@@ -374,7 +406,6 @@ h1, h2, h3 {
 .trajectory-stable { background: #EDEBE3; color: #6B6B63; }
 .trajectory-deteriorating { background: #F2E1DF; color: #8C1C13; }
 
-/* Buttons */
 .stButton > button {
     font-family: 'Inter', sans-serif;
     font-weight: 500;
@@ -382,7 +413,6 @@ h1, h2, h3 {
     border: 1px solid #14213D;
 }
 
-/* Expander headers */
 .streamlit-expanderHeader {
     font-family: 'Inter', sans-serif;
     font-weight: 500;
